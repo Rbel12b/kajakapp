@@ -317,7 +317,6 @@ show_athlete() {
   local json
   json=$(fetch "/api/getAthlete" "athleteId=${athlete_id}") || { sleep 1; return; }
 
-  clear
   local name nation born club rank points emoji aliases
   name=$(echo    "$json" | jq -r '.Athlete.Name')
   nation=$(echo  "$json" | jq -r '.Athlete.Nation')
@@ -328,31 +327,102 @@ show_athlete() {
   emoji=$(echo   "$json" | jq -r '.Athlete.KajakappEmoji // ""')
   aliases=$(echo "$json" | jq -r '.Athlete.Aliases[]?' 2>/dev/null | paste -sd ', ')
 
-  header "🏅  ATHLETE PROFILE"
+  # Parse races (sorted newest first)
+  local -a r_comp_id r_race_id r_icon r_comp r_name r_round r_dt r_pos r_time r_fin
+  while IFS='|' read -r cid rid icon comp rname round sd pos time fin; do
+    r_comp_id+=("$cid"); r_race_id+=("$rid"); r_icon+=("$icon")
+    r_comp+=("$comp");   r_name+=("$rname"); r_round+=("$round")
+    r_pos+=("$pos");     r_time+=("$time");  r_fin+=("$fin")
+    r_dt+=("$(date -d "${sd}" '+%Y-%m-%d' 2>/dev/null || echo "${sd:0:10}")")
+  done < <(echo "$json" | jq -r '
+    .Races | to_entries
+    | sort_by(.value.Race.StartDate) | reverse | .[]
+    | [
+        .value.Race.Competition.Id,
+        .value.Race.Id,
+        (.value.Race.Competition.CompetitionIcon // ""),
+        (if (.value.Race.Competition.NameEn // "") != ""
+         then .value.Race.Competition.NameEn
+         else .value.Race.Competition.NameHu end),
+        .value.Race.Name,
+        (.value.Race.Round // ""),
+        .value.Race.StartDate,
+        (.value.FinishPosition // ""),
+        (.value.FinishTime // ""),
+        (.value.IsFinished | tostring)
+      ] | join("|")
+  ' 2>/dev/null)
 
-  echo -e "  ${emoji:+${emoji} }${BOLD}${WHT}${name}${R}"
-  echo -e "  ${CYN}${nation}${R}  ${DIM}born ${born}${R}"
-  [[ -n "$club" ]]          && echo -e "  ${DIM}🏫 ${club}${R}"
-  [[ "$rank" != "-1" ]]     && echo -e "  ${YLW}🌍 ICF world rank #${rank}  (${points} pts)${R}"
-  [[ -n "$aliases" ]]       && echo -e "  ${DIM}Also known as: ${aliases}${R}"
-  echo
-  hr 64
-  echo -e "  ${DIM}ID: ${athlete_id}${R}"
-  echo
+  local total=${#r_comp_id[@]} page_size=10 offset=0
 
-  # Show recent races if any
-  local race_count
-  race_count=$(echo "$json" | jq '.Races | length' 2>/dev/null)
-  if [[ -n "$race_count" && "$race_count" != "0" ]]; then
-    echo -e "  ${BOLD}Recent races (${race_count})${R}"
-    echo "$json" | jq -r '.Races | to_entries[] | [.key, (.value | tostring)] | join("|")' 2>/dev/null \
-    | head -10 | while IFS='|' read -r k v; do
-      echo -e "  ${DIM}${k}: ${v}${R}"
-    done
+  while true; do
+    clear
+    header "🏅  ${emoji:+${emoji} }${name}"
+    echo -e "  ${CYN}${nation}${R}  ${DIM}born ${born}${R}"
+    [[ -n "$club" ]]      && echo -e "  ${DIM}🏫 ${club}${R}"
+    [[ "$rank" != "-1" ]] && echo -e "  ${YLW}🌍 ICF world rank #${rank}  (${points} pts)${R}"
+    [[ -n "$aliases" ]]   && echo -e "  ${DIM}Also known as: ${aliases}${R}"
+    echo -e "  ${DIM}ID: ${athlete_id}${R}"
+    echo; hr 64; echo
+
+    if [[ $total -eq 0 ]]; then
+      echo -e "  ${DIM}No race history available.${R}"
+      echo
+      prompt "Press Enter to go back"; read -r; return
+    fi
+
+    echo -e "  ${BOLD}Race history (${total})${R}"
     echo
-  fi
 
-  prompt "Press Enter to go back"; read -r
+    local end=$(( offset + page_size ))
+    [[ $end -gt $total ]] && end=$total
+
+    for (( i=offset; i<end; i++ )); do
+      local num=$(( i + 1 ))
+      local pos_str=""
+      local pos="${r_pos[$i]}"
+      if [[ "${r_fin[$i]}" == "true" && -n "$pos" ]]; then
+        case "$pos" in
+          "1.") pos_str=" ${YLW}🥇 ${pos}${R}" ;;
+          "2.") pos_str=" ${WHT}🥈 ${pos}${R}" ;;
+          "3.") pos_str=" ${YLW}🥉 ${pos}${R}" ;;
+          *)    pos_str=" ${DIM}${pos}${R}" ;;
+        esac
+      elif [[ "${r_fin[$i]}" != "true" ]]; then
+        pos_str=" ${DIM}upcoming${R}"
+      fi
+      local time_str=""
+      [[ -n "${r_time[$i]}" ]] && time_str="  ${DIM}${r_time[$i]}${R}"
+      printf "  ${DIM}%2d.${R}  ${CYN}%s${R}  ${DIM}%s${R}\n" \
+        "$num" "${r_dt[$i]}" "${r_icon[$i]} ${r_comp[$i]}"
+      printf "       ${BOLD}%s${R}  ${DIM}%s${R}%b%b\n" \
+        "${r_name[$i]}" "${r_round[$i]}" "$pos_str" "$time_str"
+      echo
+    done
+
+    local hints=""
+    [[ $offset -gt 0 ]]    && hints+="[p] prev  "
+    [[ $end -lt $total ]]  && hints+="[m] more  "
+    hints+="[q] back"
+    prompt "${hints}  > "; read -r choice
+    case "$choice" in
+      m|M) [[ $end -lt $total ]] && offset=$(( offset + page_size )) ;;
+      p|P) [[ $offset -gt 0 ]]   && offset=$(( offset - page_size )) ;;
+      q|Q|"") return ;;
+      *)
+        if [[ "$choice" =~ ^[0-9]+$ ]]; then
+          local idx=$(( choice - 1 ))
+          if (( idx >= 0 && idx < total )); then
+            echo -en "  ${DIM}Loading race...${R}\r"
+            local race_json
+            race_json=$(fetch "/api/getRace" \
+              "competitionId=${r_comp_id[$idx]}&raceId=${r_race_id[$idx]}") || { sleep 1; continue; }
+            _show_race_json "$race_json" "${r_comp_id[$idx]}" "${r_race_id[$idx]}"
+          fi
+        fi
+        ;;
+    esac
+  done
 }
 
 # ── upcoming races (across competitions) ─────────────────────────────────────
