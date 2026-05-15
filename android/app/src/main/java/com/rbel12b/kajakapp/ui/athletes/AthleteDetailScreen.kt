@@ -31,7 +31,7 @@ fun AthleteDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("🏅 $athleteName") },
+                title = { Text(athleteName) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

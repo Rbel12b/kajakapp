@@ -34,10 +34,10 @@ import com.rbel12b.kajakapp.ui.upcoming.UpcomingViewModel
 import kotlinx.coroutines.launch
 
 private sealed class BottomDest(val route: String, val label: String, val iconRes: Int) {
-    data object Competitions : BottomDest("competitions", "Competitions", R.drawable.ic_home)
-    data object Upcoming : BottomDest("upcoming", "Upcoming", R.drawable.ic_favorite)
-    data object Athletes : BottomDest("athletes", "Athletes", R.drawable.ic_account_box)
-    data object Me : BottomDest("me", "Me", R.drawable.ic_account_box)
+    data object Competitions : BottomDest("competitions", "Competitions", R.drawable.trophy)
+    data object Upcoming : BottomDest("upcoming", "Upcoming", R.drawable.kayaking)
+    data object Athletes : BottomDest("athletes", "Athletes", R.drawable.group)
+    data object Me : BottomDest("me", "Me", R.drawable.person)
 }
 
 private val bottomDests = listOf(

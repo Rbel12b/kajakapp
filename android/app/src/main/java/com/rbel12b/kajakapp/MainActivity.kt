@@ -13,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val app = application as KajakApplication
         setContent {
-            Kajakapp2Theme {
+            Kajakapp2Theme(darkTheme = true) {
                 AppNavigation(app)
             }
         }
