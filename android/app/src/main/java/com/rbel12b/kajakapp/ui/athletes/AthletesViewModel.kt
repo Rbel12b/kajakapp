@@ -28,16 +28,17 @@ class AthletesViewModel(private val repo: KajakRepository) : ViewModel() {
     val searchQuery: StateFlow<String> = _searchQuery
 
     fun setQuery(q: String) {
-        _searchQuery.value = q
-        if (q.isBlank()) {
+        val trimmedQuery = q.trim()
+        _searchQuery.value = trimmedQuery
+        if (trimmedQuery.isBlank()) {
             _uiState.value = AthletesUiState.Idle
             return
         }
         val cached = allAthletes
         if (cached == null) {
-            loadAndSearch(q)
+            loadAndSearch(trimmedQuery)
         } else {
-            applySearch(cached, q)
+            applySearch(cached, trimmedQuery)
         }
     }
 
