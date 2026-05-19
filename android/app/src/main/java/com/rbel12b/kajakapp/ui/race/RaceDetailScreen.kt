@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,7 @@ fun RaceDetailScreen(
     favoriteIds: Set<String> = emptySet(),
 ) {
     val uiState by vm.uiState.collectAsState()
+    val isRefreshing by vm.isRefreshing.collectAsState()
 
     Scaffold(
         topBar = {
@@ -53,12 +55,17 @@ fun RaceDetailScreen(
                 ErrorState(s.message) { vm.load() }
             }
 
-            is RaceDetailUiState.Success -> RaceContent(
-                detail = s.detail,
-                modifier = Modifier.padding(padding),
-                onAthleteClick = onAthleteClick,
-                favoriteIds = favoriteIds,
-            )
+            is RaceDetailUiState.Success -> PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = vm::refresh,
+                modifier = Modifier.padding(padding).fillMaxSize(),
+            ) {
+                RaceContent(
+                    detail = s.detail,
+                    onAthleteClick = onAthleteClick,
+                    favoriteIds = favoriteIds,
+                )
+            }
         }
     }
 }
@@ -66,14 +73,13 @@ fun RaceDetailScreen(
 @Composable
 private fun RaceContent(
     detail: RaceDetail,
-    modifier: Modifier = Modifier,
     onAthleteClick: (String, String) -> Unit,
     favoriteIds: Set<String>,
 ) {
     LazyColumn(
-        modifier = modifier,
         contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxSize(),
     ) {
         item {
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
