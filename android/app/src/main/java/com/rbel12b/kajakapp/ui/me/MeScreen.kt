@@ -10,7 +10,7 @@ import androidx.compose.ui.unit.dp
 import com.rbel12b.kajakapp.data.repository.SettingsRepository
 import com.rbel12b.kajakapp.ui.athletes.AthleteDetailScreen
 import com.rbel12b.kajakapp.ui.athletes.AthleteDetailViewModel
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,6 +22,8 @@ fun MeScreen(
 ) {
     val selectedId by settingsRepo.selectedAthleteIdFlow.collectAsState(initial = null)
     val selectedName by settingsRepo.selectedAthleteNameFlow.collectAsState(initial = null)
+    val favoriteIds by settingsRepo.favoriteIdsFlow.collectAsState(initial = emptySet())
+    val scope = rememberCoroutineScope()
 
     if (selectedId == null) {
         Scaffold(
@@ -52,6 +54,8 @@ fun MeScreen(
             onBack = onClearMe,
             onRaceClick = onRaceClick,
             onSetAsMe = null,
+            favoriteIds = favoriteIds,
+            onFavoriteToggle = { id -> scope.launch { settingsRepo.toggleFavorite(id) } },
         )
     }
 }

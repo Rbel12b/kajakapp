@@ -57,6 +57,8 @@ fun AppNavigation(app: KajakApplication) {
     val showBottomBar = currentRoute in bottomRoutes
 
     val scope = rememberCoroutineScope()
+    val favoriteIds by app.settingsRepository.favoriteIdsFlow.collectAsState(initial = emptySet())
+    val onFavoriteToggle: (String) -> Unit = { id -> scope.launch { app.settingsRepository.toggleFavorite(id) } }
 
     Scaffold(
         bottomBar = {
@@ -149,6 +151,7 @@ fun AppNavigation(app: KajakApplication) {
                     onAthleteClick = { athleteId, athleteName ->
                         navController.navigate("athlete_detail/$athleteId?name=${encode(athleteName)}")
                     },
+                    favoriteIds = favoriteIds,
                 )
             }
 
@@ -164,7 +167,7 @@ fun AppNavigation(app: KajakApplication) {
             }
 
             composable(BottomDest.Athletes.route) {
-                val vm: AthletesViewModel = viewModel(factory = AthletesViewModel.factory(app.kajakRepository))
+                val vm: AthletesViewModel = viewModel(factory = AthletesViewModel.factory(app.kajakRepository, app.settingsRepository))
                 AthletesScreen(
                     vm = vm,
                     onAthleteClick = { id, name ->
@@ -194,6 +197,8 @@ fun AppNavigation(app: KajakApplication) {
                     onRaceClick = { compId, raceId, raceName ->
                         navController.navigate("race_detail/$compId/$raceId?name=${encode(raceName)}")
                     },
+                    favoriteIds = favoriteIds,
+                    onFavoriteToggle = onFavoriteToggle,
                     onSetAsMe = { athleteId, athleteName ->
                         scope.launch {
                             app.settingsRepository.saveSelectedAthlete(athleteId, athleteName)

@@ -5,10 +5,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rbel12b.kajakapp.data.api.model.Boat
@@ -25,6 +27,7 @@ fun RaceDetailScreen(
     raceName: String,
     onBack: () -> Unit,
     onAthleteClick: (id: String, name: String) -> Unit = { _, _ -> },
+    favoriteIds: Set<String> = emptySet(),
 ) {
     val uiState by vm.uiState.collectAsState()
 
@@ -54,6 +57,7 @@ fun RaceDetailScreen(
                 detail = s.detail,
                 modifier = Modifier.padding(padding),
                 onAthleteClick = onAthleteClick,
+                favoriteIds = favoriteIds,
             )
         }
     }
@@ -64,6 +68,7 @@ private fun RaceContent(
     detail: RaceDetail,
     modifier: Modifier = Modifier,
     onAthleteClick: (String, String) -> Unit,
+    favoriteIds: Set<String>,
 ) {
     LazyColumn(
         modifier = modifier,
@@ -108,20 +113,23 @@ private fun RaceContent(
             }
         } else {
             items(detail.boats) { boat ->
-                BoatCard(boat, onAthleteClick)
+                BoatCard(boat, onAthleteClick, favoriteIds)
             }
         }
     }
 }
 
 @Composable
-private fun BoatCard(boat: Boat, onAthleteClick: (String, String) -> Unit) {
+private fun BoatCard(
+    boat: Boat,
+    onAthleteClick: (String, String) -> Unit,
+    favoriteIds: Set<String>,
+) {
     val medal = positionMedal(boat.finishPosition)
     val isTop3 = boat.finishPosition in listOf("1.", "2.", "3.")
 
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-            // Line 1: medal + position + time + delta
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -154,20 +162,33 @@ private fun BoatCard(boat: Boat, onAthleteClick: (String, String) -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // Line 2: athletes + nations
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 boat.athletes.forEachIndexed { i, a ->
                     if (i > 0) Text(" / ", style = MaterialTheme.typography.bodySmall)
+                    val isFav = a.id.isNotBlank() && a.id in favoriteIds
+                    if (isFav) {
+                        Icon(
+                            Icons.Filled.Star,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = Color(0xFFFFB300),
+                        )
+                        Spacer(Modifier.width(2.dp))
+                    }
                     val label = if (a.emoji.isNotBlank()) "${a.name} ${a.emoji}" else a.name
                     if (a.id.isNotBlank()) {
                         TextButton(
                             onClick = { onAthleteClick(a.id, a.name) },
                             contentPadding = PaddingValues(0.dp),
                         ) {
-                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isFav) Color(0xFFFFB300) else LocalContentColor.current,
+                            )
                         }
                     } else {
                         Text(label, style = MaterialTheme.typography.bodyMedium)

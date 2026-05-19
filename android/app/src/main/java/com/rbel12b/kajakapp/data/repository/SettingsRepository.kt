@@ -18,6 +18,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_TOKEN = stringPreferencesKey("token")
         private val KEY_SELECTED_ATHLETE_ID = stringPreferencesKey("selected_athlete_id")
         private val KEY_SELECTED_ATHLETE_NAME = stringPreferencesKey("selected_athlete_name")
+        private val KEY_FAVORITE_IDS = stringPreferencesKey("favorite_athlete_ids")
     }
 
     val tokenFlow: Flow<String> = context.dataStore.data.map { prefs ->
@@ -47,6 +48,26 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs.remove(KEY_SELECTED_ATHLETE_ID)
             prefs.remove(KEY_SELECTED_ATHLETE_NAME)
+        }
+    }
+
+    val favoriteIdsFlow: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_FAVORITE_IDS]
+            ?.split(",")
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            ?: emptySet()
+    }
+
+    suspend fun toggleFavorite(id: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_FAVORITE_IDS]
+                ?.split(",")
+                ?.filter { it.isNotBlank() }
+                ?.toMutableSet()
+                ?: mutableSetOf()
+            if (id in current) current.remove(id) else current.add(id)
+            prefs[KEY_FAVORITE_IDS] = current.joinToString(",")
         }
     }
 }

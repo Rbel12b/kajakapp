@@ -5,10 +5,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rbel12b.kajakapp.data.api.model.AthleteRaceEntry
@@ -24,9 +27,13 @@ fun AthleteDetailScreen(
     onBack: () -> Unit,
     onRaceClick: (String, String, String) -> Unit,
     onSetAsMe: ((String, String) -> Unit)? = null,
+    favoriteIds: Set<String> = emptySet(),
+    onFavoriteToggle: (String) -> Unit = {},
 ) {
     val uiState by vm.uiState.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
+
+    val currentAthleteId = (uiState as? AthleteDetailUiState.Success)?.detail?.athlete?.id
 
     Scaffold(
         topBar = {
@@ -35,6 +42,18 @@ fun AthleteDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (currentAthleteId != null) {
+                        val isFav = currentAthleteId in favoriteIds
+                        IconButton(onClick = { onFavoriteToggle(currentAthleteId) }) {
+                            Icon(
+                                imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.Star,
+                                contentDescription = if (isFav) "Remove from favourites" else "Add to favourites",
+                                tint = if (isFav) Color(0xFFFFB300) else LocalContentColor.current,
+                            )
+                        }
                     }
                 }
             )
@@ -56,7 +75,6 @@ fun AthleteDetailScreen(
                 val upcoming = s.sortedRaces.filter { !it.isFinished }
 
                 Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-                    // Athlete header card
                     OutlinedCard(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -139,11 +157,9 @@ private fun AthleteRaceCard(entry: AthleteRaceEntry, onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(entry.race.name, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.titleSmall)
-                    if (entry.race.round.isNotBlank()) {
-                        Text(entry.race.round, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                Text(entry.race.name, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.titleSmall)
+                if (entry.race.round.isNotBlank()) {
+                    Text(entry.race.round, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(formatDate(entry.race.startDate), style = MaterialTheme.typography.bodySmall)
             }
