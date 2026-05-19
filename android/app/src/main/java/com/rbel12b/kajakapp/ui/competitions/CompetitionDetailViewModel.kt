@@ -27,21 +27,36 @@ class CompetitionDetailViewModel(
     private val _uiState = MutableStateFlow<CompetitionDetailUiState>(CompetitionDetailUiState.Loading)
     val uiState: StateFlow<CompetitionDetailUiState> = _uiState
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
     init { load() }
 
     fun load() {
         viewModelScope.launch {
             _uiState.value = CompetitionDetailUiState.Loading
-            repo.getCompetition(competitionId).fold(
-                onSuccess = { detail ->
-                    val sorted = detail.races.entries
-                        .sortedBy { it.key.toIntOrNull() ?: 0 }
-                        .map { it.key to it.value }
-                    _uiState.value = CompetitionDetailUiState.Success(detail, sorted)
-                },
-                onFailure = { _uiState.value = CompetitionDetailUiState.Error(it.message ?: "Unknown error") }
-            )
+            fetchAndUpdate(forceRefresh = false)
         }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            fetchAndUpdate(forceRefresh = true)
+            _isRefreshing.value = false
+        }
+    }
+
+    private suspend fun fetchAndUpdate(forceRefresh: Boolean) {
+        repo.getCompetition(competitionId, forceRefresh).fold(
+            onSuccess = { detail ->
+                val sorted = detail.races.entries
+                    .sortedBy { it.key.toIntOrNull() ?: 0 }
+                    .map { it.key to it.value }
+                _uiState.value = CompetitionDetailUiState.Success(detail, sorted)
+            },
+            onFailure = { _uiState.value = CompetitionDetailUiState.Error(it.message ?: "Unknown error") }
+        )
     }
 
     companion object {

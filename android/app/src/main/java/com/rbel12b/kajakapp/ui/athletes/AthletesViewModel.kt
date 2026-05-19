@@ -13,10 +13,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed interface AthletesUiState {
-    data object Idle : AthletesUiState
     data object Loading : AthletesUiState
-    data class Results(val items: List<Athlete>, val query: String) : AthletesUiState
-    data class TooMany(val count: Int) : AthletesUiState
+    data class Ready(
+        val favoriteAthletes: List<Athlete>,
+        val athletes: List<Athlete>,
+        val query: String,
+        val tooMany: Boolean = false,
+    ) : AthletesUiState
     data class Error(val message: String) : AthletesUiState
 }
 
@@ -25,10 +28,14 @@ class AthletesViewModel(
     private val settingsRepo: SettingsRepository,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow<AthletesUiState>(AthletesUiState.Idle)
+    private val _uiState = MutableStateFlow<AthletesUiState>(AthletesUiState.Loading)
     val uiState: StateFlow<AthletesUiState> = _uiState
 
-    private var allAthletes: List<Athlete>? = null
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
+    private var allAthletes: List<Athlete> = emptyList()
+    private var isLoaded = false
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
@@ -36,72 +43,66 @@ class AthletesViewModel(
     val favoriteIds: StateFlow<Set<String>> = settingsRepo.favoriteIdsFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
-    private val _favoriteAthletes = MutableStateFlow<List<Athlete>>(emptyList())
-    val favoriteAthletes: StateFlow<List<Athlete>> = _favoriteAthletes
-
     init {
         viewModelScope.launch {
-            var preloadStarted = false
-            favoriteIds.collect { ids ->
-                val cached = allAthletes
-                if (cached != null) {
-                    _favoriteAthletes.value = cached.filter { it.id in ids }
-                } else if (ids.isNotEmpty() && !preloadStarted) {
-                    preloadStarted = true
-                    launch {
-                        repo.getAthletes().onSuccess { list ->
-                            allAthletes = list
-                            _favoriteAthletes.value = list.filter { it.id in favoriteIds.value }
-                        }
-                    }
-                }
+            repo.getAthletes().fold(
+                onSuccess = { list ->
+                    allAthletes = list
+                    isLoaded = true
+                    updateState()
+                },
+                onFailure = { _uiState.value = AthletesUiState.Error(it.message ?: "Unknown error") }
+            )
+        }
+        viewModelScope.launch {
+            favoriteIds.collect { if (isLoaded) updateState() }
+        }
+    }
+
+    fun setQuery(q: String) {
+        _searchQuery.value = q
+        if (isLoaded) updateState()
+    }
+
+    private fun updateState() {
+        val q = _searchQuery.value.lowercase().trim()
+        val ids = favoriteIds.value
+        val favs = allAthletes.filter { it.id in ids }
+
+        if (q.isEmpty()) {
+            _uiState.value = AthletesUiState.Ready(favs, allAthletes.filter { it.id !in ids }, "")
+        } else {
+            val filteredFavs = favs.filter { matches(it, q) }
+            val filteredOthers = allAthletes.filter { it.id !in ids && matches(it, q) }
+            _uiState.value = when {
+                filteredOthers.size > 40 -> AthletesUiState.Ready(filteredFavs, emptyList(), q, tooMany = true)
+                else -> AthletesUiState.Ready(filteredFavs, filteredOthers, q)
             }
+        }
+    }
+
+    private fun matches(a: Athlete, q: String) =
+        a.name.lowercase().contains(q) ||
+            a.nation.lowercase().contains(q) ||
+            a.club.lowercase().contains(q)
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            repo.getAthletes(forceRefresh = true).fold(
+                onSuccess = { list ->
+                    allAthletes = list
+                    isLoaded = true
+                    updateState()
+                },
+                onFailure = { _uiState.value = AthletesUiState.Error(it.message ?: "Unknown error") }
+            )
+            _isRefreshing.value = false
         }
     }
 
     fun toggleFavorite(athleteId: String) {
         viewModelScope.launch { settingsRepo.toggleFavorite(athleteId) }
-    }
-
-    fun setQuery(q: String) {
-        _searchQuery.value = q
-        if (q.isBlank()) {
-            _uiState.value = AthletesUiState.Idle
-            return
-        }
-        val cached = allAthletes
-        if (cached == null) {
-            loadAndSearch(q)
-        } else {
-            applySearch(cached, q)
-        }
-    }
-
-    private fun loadAndSearch(q: String) {
-        viewModelScope.launch {
-            _uiState.value = AthletesUiState.Loading
-            repo.getAthletes().fold(
-                onSuccess = { list ->
-                    allAthletes = list
-                    _favoriteAthletes.value = list.filter { it.id in favoriteIds.value }
-                    applySearch(list, q)
-                },
-                onFailure = { _uiState.value = AthletesUiState.Error(it.message ?: "Unknown error") }
-            )
-        }
-    }
-
-    private fun applySearch(athletes: List<Athlete>, q: String) {
-        val lower = q.lowercase().trim()
-        val filtered = athletes.filter { a ->
-            a.name.lowercase().contains(lower) ||
-                a.nation.lowercase().contains(lower) ||
-                a.club.lowercase().contains(lower)
-        }
-        _uiState.value = when {
-            filtered.size > 40 -> AthletesUiState.TooMany(filtered.size)
-            else -> AthletesUiState.Results(filtered, q)
-        }
     }
 
     companion object {

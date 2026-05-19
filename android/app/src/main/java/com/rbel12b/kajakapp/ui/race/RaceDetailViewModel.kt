@@ -24,16 +24,31 @@ class RaceDetailViewModel(
     private val _uiState = MutableStateFlow<RaceDetailUiState>(RaceDetailUiState.Loading)
     val uiState: StateFlow<RaceDetailUiState> = _uiState
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
     init { load() }
 
     fun load() {
         viewModelScope.launch {
             _uiState.value = RaceDetailUiState.Loading
-            repo.getRace(competitionId, raceId).fold(
-                onSuccess = { _uiState.value = RaceDetailUiState.Success(it) },
-                onFailure = { _uiState.value = RaceDetailUiState.Error(it.message ?: "Unknown error") }
-            )
+            fetchAndUpdate(forceRefresh = false)
         }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            fetchAndUpdate(forceRefresh = true)
+            _isRefreshing.value = false
+        }
+    }
+
+    private suspend fun fetchAndUpdate(forceRefresh: Boolean) {
+        repo.getRace(competitionId, raceId, forceRefresh).fold(
+            onSuccess = { _uiState.value = RaceDetailUiState.Success(it) },
+            onFailure = { _uiState.value = RaceDetailUiState.Error(it.message ?: "Unknown error") }
+        )
     }
 
     companion object {

@@ -23,6 +23,9 @@ class CompetitionsViewModel(private val repo: KajakRepository) : ViewModel() {
     private val _uiState = MutableStateFlow<CompetitionsUiState>(CompetitionsUiState.Loading)
     val uiState: StateFlow<CompetitionsUiState> = _uiState
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
     private var allCompetitions: List<Competition> = emptyList()
 
     private val _filter = MutableStateFlow(CompetitionsFilter.UPCOMING)
@@ -36,14 +39,26 @@ class CompetitionsViewModel(private val repo: KajakRepository) : ViewModel() {
     fun load() {
         viewModelScope.launch {
             _uiState.value = CompetitionsUiState.Loading
-            repo.getCompetitions().fold(
-                onSuccess = { list ->
-                    allCompetitions = list
-                    applyFilter()
-                },
-                onFailure = { _uiState.value = CompetitionsUiState.Error(it.message ?: "Unknown error") }
-            )
+            fetchAndUpdate(forceRefresh = false)
         }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            fetchAndUpdate(forceRefresh = true)
+            _isRefreshing.value = false
+        }
+    }
+
+    private suspend fun fetchAndUpdate(forceRefresh: Boolean) {
+        repo.getCompetitions(forceRefresh).fold(
+            onSuccess = { list ->
+                allCompetitions = list
+                applyFilter()
+            },
+            onFailure = { _uiState.value = CompetitionsUiState.Error(it.message ?: "Unknown error") }
+        )
     }
 
     fun setFilter(f: CompetitionsFilter) {

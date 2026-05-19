@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,8 +28,8 @@ fun AthletesScreen(
 ) {
     val uiState by vm.uiState.collectAsState()
     val query by vm.searchQuery.collectAsState()
+    val isRefreshing by vm.isRefreshing.collectAsState()
     val favoriteIds by vm.favoriteIds.collectAsState()
-    val favoriteAthletes by vm.favoriteAthletes.collectAsState()
 
     Scaffold(
         topBar = {
@@ -55,71 +56,74 @@ fun AthletesScreen(
             )
 
             when (val s = uiState) {
-                is AthletesUiState.Idle -> {
-                    if (favoriteAthletes.isNotEmpty()) {
-                        LazyColumn(
-                            contentPadding = PaddingValues(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            item {
-                                Text(
-                                    "Favourites",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                )
-                            }
-                            items(favoriteAthletes, key = { it.id }) { athlete ->
-                                AthleteCard(
-                                    athlete = athlete,
-                                    isFavorite = true,
-                                    onFavoriteToggle = { vm.toggleFavorite(athlete.id) },
-                                    onClick = { onAthleteClick(athlete.id, athlete.name) },
-                                )
-                            }
-                        }
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                "Enter a name, nation (e.g. HUN) or club",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-
                 is AthletesUiState.Loading -> Box(
                     Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) { CircularProgressIndicator() }
 
-                is AthletesUiState.TooMany -> Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Too many results (${s.count}). Narrow your search.")
-                }
+                is AthletesUiState.Error -> ErrorState(s.message) { vm.refresh() }
 
-                is AthletesUiState.Error -> ErrorState(s.message) { vm.setQuery(query) }
-
-                is AthletesUiState.Results -> {
-                    if (s.items.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No athletes found.")
-                        }
-                    } else {
+                is AthletesUiState.Ready -> {
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = vm::refresh,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
                         LazyColumn(
                             contentPadding = PaddingValues(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxSize(),
                         ) {
-                            items(s.items, key = { it.id }) { athlete ->
-                                AthleteCard(
-                                    athlete = athlete,
-                                    isFavorite = athlete.id in favoriteIds,
-                                    onFavoriteToggle = { vm.toggleFavorite(athlete.id) },
-                                    onClick = { onAthleteClick(athlete.id, athlete.name) },
-                                )
+                            if (s.favoriteAthletes.isNotEmpty()) {
+                                item(key = "header_favs") {
+                                    SectionHeader("Favourites")
+                                }
+                                items(s.favoriteAthletes, key = { "fav_${it.id}" }) { athlete ->
+                                    AthleteCard(
+                                        athlete = athlete,
+                                        isFavorite = true,
+                                        onFavoriteToggle = { vm.toggleFavorite(athlete.id) },
+                                        onClick = { onAthleteClick(athlete.id, athlete.name) },
+                                    )
+                                }
+                            }
+
+                            if (s.tooMany) {
+                                item(key = "too_many") {
+                                    Box(
+                                        Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            "Too many results. Narrow your search.",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            } else if (s.athletes.isNotEmpty()) {
+                                item(key = "header_athletes") {
+                                    if (s.query.isEmpty()) {
+                                        SectionHeader("All Athletes (${s.athletes.size + s.favoriteAthletes.size})")
+                                    } else if (s.favoriteAthletes.isNotEmpty()) {
+                                        SectionHeader("Results")
+                                    }
+                                }
+                                items(s.athletes, key = { it.id }) { athlete ->
+                                    AthleteCard(
+                                        athlete = athlete,
+                                        isFavorite = athlete.id in favoriteIds,
+                                        onFavoriteToggle = { vm.toggleFavorite(athlete.id) },
+                                        onClick = { onAthleteClick(athlete.id, athlete.name) },
+                                    )
+                                }
+                            } else if (s.query.isNotEmpty() && s.favoriteAthletes.isEmpty()) {
+                                item(key = "empty") {
+                                    Box(
+                                        Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) { Text("No athletes found.") }
+                                }
                             }
                         }
                     }
@@ -127,6 +131,16 @@ fun AthletesScreen(
             }
         }
     }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+    )
 }
 
 @Composable

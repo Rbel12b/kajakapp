@@ -2,10 +2,12 @@ package com.rbel12b.kajakapp
 
 import android.app.Application
 import com.rbel12b.kajakapp.data.api.KajakApi
+import com.rbel12b.kajakapp.data.cache.FileCache
 import com.rbel12b.kajakapp.data.repository.KajakRepository
 import com.rbel12b.kajakapp.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.io.File
 
 class KajakApplication : Application() {
 
@@ -21,6 +23,7 @@ class KajakApplication : Application() {
         val api = KajakApi {
             runBlocking { settingsRepository.tokenFlow.first() }
         }
-        kajakRepository = KajakRepository(api)
+        val fileCache = FileCache(File(cacheDir, "api_cache"))
+        kajakRepository = KajakRepository(api, fileCache)
     }
 }

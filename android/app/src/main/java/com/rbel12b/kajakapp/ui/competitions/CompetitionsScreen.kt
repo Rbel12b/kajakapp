@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +29,7 @@ fun CompetitionsScreen(
     val uiState by vm.uiState.collectAsState()
     val filter by vm.filter.collectAsState()
     val search by vm.search.collectAsState()
+    val isRefreshing by vm.isRefreshing.collectAsState()
 
     Scaffold(
         topBar = {
@@ -82,18 +84,25 @@ fun CompetitionsScreen(
                 is CompetitionsUiState.Error -> ErrorState(s.message) { vm.load() }
 
                 is CompetitionsUiState.Success -> {
-                    if (s.items.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No competitions found.", style = MaterialTheme.typography.bodyLarge)
-                        }
-                    } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(s.items, key = { it.id }) { comp ->
-                                CompetitionCard(comp) {
-                                    onCompetitionClick(comp.id, comp.displayName, comp.icon)
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = vm::refresh,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        if (s.items.isEmpty()) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("No competitions found.", style = MaterialTheme.typography.bodyLarge)
+                            }
+                        } else {
+                            LazyColumn(
+                                contentPadding = PaddingValues(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxSize(),
+                            ) {
+                                items(s.items, key = { it.id }) { comp ->
+                                    CompetitionCard(comp) {
+                                        onCompetitionClick(comp.id, comp.displayName, comp.icon)
+                                    }
                                 }
                             }
                         }
@@ -106,10 +115,7 @@ fun CompetitionsScreen(
 
 @Composable
 private fun CompetitionCard(comp: Competition, onClick: () -> Unit) {
-    OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-    ) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 "${comp.icon} ${comp.displayName}",

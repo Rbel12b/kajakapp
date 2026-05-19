@@ -27,20 +27,34 @@ class AthleteDetailViewModel(
     private val _uiState = MutableStateFlow<AthleteDetailUiState>(AthleteDetailUiState.Loading)
     val uiState: StateFlow<AthleteDetailUiState> = _uiState
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
     init { load() }
 
     fun load() {
         viewModelScope.launch {
             _uiState.value = AthleteDetailUiState.Loading
-            repo.getAthlete(athleteId).fold(
-                onSuccess = { detail ->
-                    val sorted = detail.races.values
-                        .sortedByDescending { it.race.startDate }
-                    _uiState.value = AthleteDetailUiState.Success(detail, sorted)
-                },
-                onFailure = { _uiState.value = AthleteDetailUiState.Error(it.message ?: "Unknown error") }
-            )
+            fetchAndUpdate(forceRefresh = false)
         }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            fetchAndUpdate(forceRefresh = true)
+            _isRefreshing.value = false
+        }
+    }
+
+    private suspend fun fetchAndUpdate(forceRefresh: Boolean) {
+        repo.getAthlete(athleteId, forceRefresh).fold(
+            onSuccess = { detail ->
+                val sorted = detail.races.values.sortedByDescending { it.race.startDate }
+                _uiState.value = AthleteDetailUiState.Success(detail, sorted)
+            },
+            onFailure = { _uiState.value = AthleteDetailUiState.Error(it.message ?: "Unknown error") }
+        )
     }
 
     companion object {

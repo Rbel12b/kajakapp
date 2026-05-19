@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.rbel12b.kajakapp.data.api.model.Competition
-import com.rbel12b.kajakapp.data.api.model.RaceDetail
 import com.rbel12b.kajakapp.data.repository.KajakRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,6 +32,9 @@ class UpcomingViewModel(private val repo: KajakRepository) : ViewModel() {
     private val _uiState = MutableStateFlow<UpcomingUiState>(UpcomingUiState.Loading)
     val uiState: StateFlow<UpcomingUiState> = _uiState
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
     private var allUpcomingComps: List<Competition> = emptyList()
     private var loadedRaces: MutableList<UpcomingRaceItem> = mutableListOf()
     private var compIndex = 0
@@ -44,28 +46,38 @@ class UpcomingViewModel(private val repo: KajakRepository) : ViewModel() {
     fun load() {
         viewModelScope.launch {
             _uiState.value = UpcomingUiState.Loading
-            repo.getCompetitions().fold(
-                onSuccess = { list ->
-                    val today = LocalDate.now().toString()
-                    allUpcomingComps = list
-                        .filter { it.endDate >= today }
-                        .sortedBy { it.startDate }
-                    compIndex = 0
-                    raceIndex = 1
-                    loadedRaces.clear()
-                    loadMore()
-                },
-                onFailure = { _uiState.value = UpcomingUiState.Error(it.message ?: "Unknown error") }
-            )
+            fetchCompetitionsAndLoadMore(forceRefresh = false)
         }
     }
 
-    fun loadMore() {
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            fetchCompetitionsAndLoadMore(forceRefresh = true)
+            _isRefreshing.value = false
+        }
+    }
+
+    private suspend fun fetchCompetitionsAndLoadMore(forceRefresh: Boolean) {
+        repo.getCompetitions(forceRefresh).fold(
+            onSuccess = { list ->
+                val today = LocalDate.now().toString()
+                allUpcomingComps = list.filter { it.endDate >= today }.sortedBy { it.startDate }
+                compIndex = 0
+                raceIndex = 1
+                loadedRaces.clear()
+                loadMore(forceRefresh)
+            },
+            onFailure = { _uiState.value = UpcomingUiState.Error(it.message ?: "Unknown error") }
+        )
+    }
+
+    fun loadMore(forceRefresh: Boolean = false) {
         viewModelScope.launch {
             val target = loadedRaces.size + pageSize
             while (loadedRaces.size < target && compIndex < allUpcomingComps.size) {
                 val comp = allUpcomingComps[compIndex]
-                val result = repo.getRace(comp.id, raceIndex.toString())
+                val result = repo.getRace(comp.id, raceIndex.toString(), forceRefresh)
                 result.fold(
                     onSuccess = { race ->
                         if (race.race.name.isBlank()) {
